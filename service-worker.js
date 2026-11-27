@@ -1,11 +1,15 @@
 // Caché offline. Al cambiar cualquier archivo, subir el número de versión.
-const V = "operativo-v37";
+const V = "operativo-v52";
 const ARCHIVOS = [
   "./",
   "./index.html",
   "./app.js",
   "./data.js",
   "./codigos.js",
+  "./anotador.js",
+  "./anexos.js",
+  "./protocolos.js",
+  "./protocolos-data.js",
   "./manifest.json",
   "./favicon-64.png",
   "./icon-192.png",
@@ -32,26 +36,31 @@ self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys().then(ks =>
       Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 // Estrategia: devuelve caché al instante y actualiza en segundo plano.
 self.addEventListener("fetch", e => {
-  if (e.request.method !== "GET") return;
-  if (new URL(e.request.url).origin !== location.origin) return; // APIs externas (geocodificación) van directo a la red
+  const req = e.request;
+  if (req.method !== "GET") return;
+  if (new URL(req.url).origin !== location.origin) return; // APIs externas (geocodificación) van directo a la red
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const red = fetch(e.request)
+    caches.match(req, { ignoreSearch: req.mode === "navigate" }).then(cached => {
+      const red = fetch(req)
         .then(n => {
-          if (n && n.status === 200 && new URL(e.request.url).origin === location.origin) {
+          if (n && n.status === 200 && n.type === "basic") {
             const cp = n.clone();
-            caches.open(V).then(c => c.put(e.request, cp));
+            e.waitUntil(caches.open(V).then(c => c.put(req, cp)));
           }
           return n;
         })
-        .catch(() => cached || caches.match("./index.html"));
+        .catch(() => {
+          if (cached) return cached;
+          // Solo las navegaciones caen al index.html; un script o imagen faltante no debe devolver HTML
+          if (req.mode === "navigate") return caches.match("./index.html");
+          return Response.error();
+        });
       return cached || red;
     })
   );

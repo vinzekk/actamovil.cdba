@@ -10,30 +10,17 @@
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
   ];
 
-  const DIAS_LETRAS = {
-    1: "uno", 2: "dos", 3: "tres", 4: "cuatro", 5: "cinco",
-    6: "seis", 7: "siete", 8: "ocho", 9: "nueve", 10: "diez",
-    11: "once", 12: "doce", 13: "trece", 14: "catorce", 15: "quince",
-    16: "dieciséis", 17: "diecisiete", 18: "dieciocho", 19: "diecinueve", 20: "veinte",
-    21: "veintiuno", 22: "veintidós", 23: "veintitrés", 24: "veinticuatro", 25: "veinticinco",
-    26: "veintiséis", 27: "veintisiete", 28: "veintiocho", 29: "veintinueve", 30: "treinta",
-    31: "treinta y uno"
-  };
-
-  const ANOS_DOS_MIL = {
-    24: "veinticuatro",
-    25: "veinticinco",
-    26: "veintiséis",
-    27: "veintisiete",
-    28: "veintiocho",
-    29: "veintinueve",
-    30: "treinta",
-    31: "treinta y uno",
-    32: "treinta y dos",
-    33: "treinta y tres",
-    34: "treinta y cuatro",
-    35: "treinta y cinco"
-  };
+  const UNIDADES = [
+    "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
+    "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve",
+    "veinte", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco", "veintiséis", "veintisiete", "veintiocho", "veintinueve"
+  ];
+  const DECENAS = ["", "", "", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
+  const enLetras = (n) => (n < 30 ? UNIDADES[n] : DECENAS[Math.floor(n / 10)] + (n % 10 ? " y " + UNIDADES[n % 10] : ""));
+  const DIAS_LETRAS = {};
+  for (let n = 1; n <= 31; n++) DIAS_LETRAS[n] = enLetras(n);
+  const ANOS_DOS_MIL = {};
+  for (let n = 1; n <= 99; n++) ANOS_DOS_MIL[n] = enLetras(n);
 
   const CATALOGO_CODIGOS = typeof CODIGOS_BASE !== "undefined" ? CODIGOS_BASE : [];
 
@@ -57,13 +44,7 @@
 
   const LS_BORR = "op_cba_borradores_v2";
   const LS_CFG = "op_cba_cfg_v1";
-  const LS_CONT = "op_cba_contactos_v1";
-  const LS_GUIA = "op_cba_guia_v1";
   const NORMATIVA_VERSION = "20/11/2026 (Ley 10.326 según B.O. 28/03/2016; Código Penal T.O. 1984 actualizado; CPP Córdoba Ley 8.123 según SAIJ)";
-  const CONT_DEF = [
-    { n: "Emergencias 911", t: "911" }, { n: "Fiscalía de turno", t: "" },
-    { n: "Unidad Judicial", t: "" }, { n: "SeNAF", t: "" }, { n: "Mi dependencia", t: "" }
-  ];
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   let store = { list: [], act: null };
@@ -86,7 +67,7 @@
     if (raw) {
       try {
         const o = JSON.parse(raw);
-        store = o.enc ? { list: [], act: null } : o;
+        store = (o && !o.enc && Array.isArray(o.list)) ? o : { list: [], act: null };
       } catch { store = { list: [], act: null }; }
     }
     const viejo = loadJSON(LS_BORRADOR, null);
@@ -193,10 +174,19 @@
 
   function cargarValoresPorDefecto(limpiarTodo) {
     const pl = PLANTILLAS[estado.tipo];
+    // Lo escrito en campos que este tipo de acta no tiene se guarda aparte y vuelve si se regresa al tipo original
+    if (limpiarTodo) estado.guardados = {};
+    const guard = (estado.guardados = estado.guardados || {});
+    Object.keys(estado.valores || {}).forEach((k) => {
+      if (!pl.campos.some((c) => c.id === k) && String(estado.valores[k] || "").trim()) guard[k] = estado.valores[k];
+    });
     const nuevos = {};
     pl.campos.forEach((c) => {
       if (!limpiarTodo && estado.valores[c.id] !== undefined) {
         nuevos[c.id] = estado.valores[c.id];
+      } else if (!limpiarTodo && guard[c.id] !== undefined) {
+        nuevos[c.id] = guard[c.id];
+        delete guard[c.id];
       } else if (c.perfil && perfil[c.id]) {
         nuevos[c.id] = perfil[c.id];
       } else if (c.def !== undefined) {
@@ -231,7 +221,7 @@
   //  Interfaz v4 · utilidades
   // =====================================================================
   const PAGINA = 30;
-  const TABS = ["actas", "codigos", "perfil"];
+  const TABS = ["inicio", "actas", "codigos", "perfil", "anexos", "protocolos", "anotador"];
 
   function toast(msg, opt) {
     const el = $("#toast");
@@ -278,7 +268,7 @@
 
   // ---------- Navegación inferior (con botón "atrás" del teléfono) ----------
   function mostrar(t) {
-    if (!TABS.includes(t)) t = "actas";
+    if (!TABS.includes(t)) t = "inicio";
     document.body.dataset.tab = t;
     $$("main .tab").forEach((s) => s.classList.toggle("on", s.id === t));
     $$("nav.bar button").forEach((b) => {
@@ -288,7 +278,7 @@
     if (t === "codigos") renderCodigos();
   }
   function irA(t) {
-    if ((location.hash.slice(1) || "actas") === t) mostrar(t); else location.hash = t;
+    if ((location.hash.slice(1) || "inicio") === t) mostrar(t); else location.hash = t;
   }
   $$("nav.bar button").forEach((b) => b.addEventListener("click", () => {
     irA(b.dataset.t);
@@ -471,12 +461,12 @@
   // =====================================================================
   const GRUPOS = [
     { id: "fecha", t: "Fecha, hora y localidad", ids: ["LOCALIDAD", "DEPARTAMENTO", "DIA", "MES", "AÑO", "HORA", "MINUTOS"] },
+    { id: "funcionario", t: "Funcionario actuante", ids: ["FUNCIONARIO", "DEPENDENCIA"] },
     { id: "hecho", t: "Lugar del hecho", test: (id) => /_HECHO$/.test(id) },
-    { id: "relato", t: "Relato y diligencias", ids: ["RELATO", "SECUESTRO", "INFRACTOR", "UNIDAD_JUDICIAL", "ARTICULOS", "FIRMA_SI"] },
     { id: "testigo", t: "Testigo hábil", test: (id) => id.startsWith("TESTIGO_") },
+    { id: "relato", t: "Relato y diligencias", ids: ["RELATO", "SECUESTRO", "INFRACTOR", "UNIDAD_JUDICIAL", "ARTICULOS", "FIRMA_SI"] },
     { id: "aprehendido", t: "Persona aprehendida", ids: ["DISPOSICION"], test: (id) => id.startsWith("APREHENDIDO_") },
     { id: "filiacion", t: "Filiación y vestimenta", ids: ["CUTIS", "ALTURA", "CONTEXTURA", "CABELLO", "VESTIMENTA"] },
-    { id: "funcionario", t: "Funcionario actuante", ids: ["FUNCIONARIO", "DEPENDENCIA"] }
   ];
   const GRUPO_OTROS = { id: "otros", t: "Otros datos" };
   function grupoDe(id) {
@@ -485,8 +475,8 @@
   function spanDe(id) {
     if (/^(DIA|MES|AÑO)$/.test(id)) return "c3";
     if (/^(HORA|MINUTOS)$/.test(id)) return "q";
-    if (/(_CALLE|^CALLE_HECHO)$/.test(id)) return "c4";
-    if (/(_NRO|^NRO_HECHO)$/.test(id)) return "c2";
+    if (/(_CALLE|^CALLE_HECHO)$/.test(id)) return "c3";
+    if (/(_NRO|^NRO_HECHO)$/.test(id)) return "c3";
     if (/(_PISO|_BARRIO|_CIUDAD|_DNI|_EDAD|_PROFESION|_ESTADO_CIVIL)$/.test(id)) return "c3";
     if (/^(LOCALIDAD|DEPARTAMENTO|UNIDAD_JUDICIAL|ALTURA|CUTIS|CONTEXTURA|CABELLO|FIRMA_SI)$/.test(id)) return "c3";
     return "";
@@ -536,7 +526,7 @@
       <details class="grupo" data-g="${o.g.id}" ${o === primera ? "open" : ""}>
         <summary><span class="t">${o.g.t}</span><span class="n"></span></summary>
         <div class="campos">
-          ${o.g.id === "hecho" ? `<div class="campo"><button type="button" id="gps" class="sm">Usar mi ubicación (GPS)</button> <span id="gpsEstado" role="status"></span></div>` : ""}
+          ${o.g.id === "fecha" ? `<div class="campo"><button type="button" class="sm" data-gps="fecha">Usar datos del dispositivo (actual)</button> <span data-gpsest role="status"></span></div>` : o.g.id === "hecho" ? `<div class="campo"><button type="button" class="sm" data-gps="hecho">Usar mi ubicación (GPS)</button> <span data-gpsest role="status"></span></div>` : ""}
           ${o.campos.map(campoHtml).join("")}
         </div>
       </details>`).join("");
@@ -588,20 +578,32 @@
     if (f) { insertarEnCursor($("#f_RELATO"), frasesActuales()[+f.dataset.frase]); return; }
     const m = e.target.closest("[data-mic]");
     if (m) { toggleDictado(m.dataset.mic, m); return; }
-    if (e.target.closest("#gps")) aplicarUbicacion(false, true);
+    const gb = e.target.closest("[data-gps]");
+    if (gb) {
+      if (gb.dataset.gps === "fecha") {
+        // Fecha y hora del dispositivo + localidad/departamento por ubicación (no toca el lugar del hecho)
+        aplicarFechaHora();
+        actualizarVista();
+        guardarBorrador();
+        toast("Fecha y hora actualizadas");
+        aplicarUbicacion(false, true, "fecha");
+      } else {
+        aplicarUbicacion(false, true);
+      }
+    }
   });
 
   // ---------- Fecha, hora y ubicación ----------
   let geoEnCurso = false;
-  async function aplicarUbicacion(silencioso = false, forzar = false) {
+  async function aplicarUbicacion(silencioso = false, forzar = false, alcance = "todo") {
     if (!navigator.geolocation) {
       if (!silencioso) toast("Este dispositivo no permite geolocalización");
       return;
     }
     if (geoEnCurso) return;
     geoEnCurso = true;
-    const est = () => $("#gpsEstado");
-    if (est()) est().textContent = "Buscando ubicación…";
+    const setEst = (t) => $$("[data-gpsest]").forEach((el) => { el.textContent = t; });
+    setEst("Buscando ubicación…");
     if (!silencioso) toast("Obteniendo ubicación GPS…");
     try {
       const pos = await new Promise((ok, err) =>
@@ -633,6 +635,7 @@
       const pl = PLANTILLAS[estado.tipo];
       const poner = (id, v) => {
         if (!v || !(id in estado.valores)) return;
+        if (alcance === "fecha" && id !== "LOCALIDAD" && id !== "DEPARTAMENTO") return;
         const act = (estado.valores[id] || "").trim();
         const def = (pl.campos.find((c) => c.id === id) || {}).def;
         if (forzar || !act || act === def || /^Coordenadas GPS/.test(act)) setVal(id, v);
@@ -645,10 +648,11 @@
       poner("DEPARTAMENTO", depto);
       actualizarVista();
       guardarBorrador();
-      if (est()) est().textContent = `Precisión ±${Math.round(accuracy)} m`;
-      if (!silencioso) toast(calle ? "Ubicación completada" : "Sin internet: se cargaron coordenadas, completá la calle a mano");
+      setEst(`Precisión ±${Math.round(accuracy)} m`);
+      if (!silencioso && alcance === "fecha") toast(ciudad ? "Fecha, hora y localidad completadas" : "Fecha y hora completadas; sin internet no se pudo obtener la localidad");
+      else if (!silencioso) toast(calle ? "Ubicación completada" : "Sin internet: se cargaron coordenadas, completá la calle a mano");
     } catch (e) {
-      if (est()) est().textContent = "";
+      setEst("");
       if (!silencioso) toast(e && e.code === 1 ? "Permiso de ubicación denegado" : "No se pudo obtener la ubicación");
     } finally {
       geoEnCurso = false;
@@ -667,7 +671,7 @@
     actualizarVista();
     guardarBorrador();
   }
-  $("#ahora").addEventListener("click", () => {
+  ($("#ahora") || document.createElement("button")).addEventListener("click", () => {
     aplicarFechaHora();
     actualizarVista();
     guardarBorrador();
@@ -678,7 +682,7 @@
 
   // ---------- Control CPP (usa CHECKLIST_CPP de data.js) ----------
   function renderChecklist() {
-    if (typeof CHECKLIST_CPP === "undefined") { $("#chkCPP").hidden = true; return; }
+    if (typeof CHECKLIST_CPP === "undefined" || !$("#chkCPP")) return;
     estado.chk = estado.chk || {};
     $("#chkLista").innerHTML = CHECKLIST_CPP.map((x, i) =>
       `<label class="ck"><input type="checkbox" data-c="${i}" ${estado.chk[i] ? "checked" : ""}><span>${escapeHtml(x)}</span></label>`).join("");
@@ -690,7 +694,7 @@
     el.textContent = `${n}/${CHECKLIST_CPP.length}`;
     $("#chkCPP").dataset.ok = n === CHECKLIST_CPP.length ? "1" : "0";
   }
-  $("#chkLista").addEventListener("change", (e) => {
+  ($("#chkLista") || document.createElement("div")).addEventListener("change", (e) => {
     const c = e.target.closest("input[data-c]");
     if (!c) return;
     estado.chk = estado.chk || {};
@@ -726,6 +730,9 @@
       const v = (d[k] || "").replace(/[.\s]/g, "");
       if (k in d && v && !/^\d{7,8}$/.test(v)) leves.push(`Revisá el D.N.I. ${q}: se esperan 7 u 8 dígitos.`);
     });
+    const h = parseInt(d.HORA, 10), mi = parseInt(d.MINUTOS, 10);
+    if ("HORA" in d && !isNaN(h) && (h < 0 || h > 23)) leves.push("Revisá la hora: debe estar entre 00 y 23.");
+    if ("MINUTOS" in d && !isNaN(mi) && (mi < 0 || mi > 59)) leves.push("Revisá los minutos: deben estar entre 00 y 59.");
     const vacios = pl.campos.filter((c) => !(d[c.id] || "").trim()).length;
     return { graves, leves, vacios };
   }
@@ -737,9 +744,9 @@
     else if (ev.vacios) { s = "falta"; txt = `${ev.vacios} ${ev.vacios === 1 ? "dato sin completar" : "datos sin completar"}`; }
     else { s = "ok"; txt = "Acta completa"; }
     chip.dataset.s = s;
-    chip.innerHTML = `${txt}<br><span style="font-weight:500;font-size:13px">Ver acta</span>`;
+    chip.textContent = txt;
     actualizarProgreso();
-    if ($("#vista").open) pintarVista(ev);
+    pintarVista(ev);
   }
   function pintarVista(ev) {
     ev = ev || evaluar();
@@ -749,13 +756,10 @@
       .replace(/_{10,}/g, (m) => `<span class="falta">${m}</span>`);
   }
   function abrirVista() {
-    const dlg = $("#vista");
-    if (!dlg.open) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", ""); }
+    irA("actas");
     pintarVista();
-    $(".db").scrollTop = 0;
+    $("#vistaPrevia").scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  $("#estadoActa").addEventListener("click", abrirVista);
-  $("#cerrarVista").addEventListener("click", () => $("#vista").close ? $("#vista").close() : $("#vista").removeAttribute("open"));
 
   function guardarBorrador() {
     const it = store.list.find((x) => x.id === store.act);
@@ -763,6 +767,23 @@
     clearTimeout(guardarBorrador._t);
     guardarBorrador._t = setTimeout(persistir, 400);
   }
+
+  function volcarYGuardar() {
+    clearTimeout(guardarBorrador._t);
+    const it = store.list.find((x) => x.id === store.act);
+    if (it) it.estado = estado;
+    persistir();
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") { volcarYGuardar(); return; }
+    if (cfg.horas > 0) {
+      const lim = Date.now() - cfg.horas * 3600000;
+      const antes = store.list.length;
+      store.list = store.list.filter((x) => x.id === store.act || x.ts >= lim);
+      if (store.list.length !== antes) { persistir(); renderBorradores(); }
+    }
+  });
+  window.addEventListener("pagehide", volcarYGuardar);
 
   // ---------- Exportación ----------
   async function copiarActa() {
@@ -797,7 +818,8 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${estado.tipo}_URD_Rio_Cuarto.doc`;
+    const ahora = new Date(), p2 = (n) => String(n).padStart(2, "0");
+    a.download = `acta_${estado.tipo}_${ahora.getFullYear()}${p2(ahora.getMonth() + 1)}${p2(ahora.getDate())}_${p2(ahora.getHours())}${p2(ahora.getMinutes())}.doc`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -818,12 +840,29 @@
   let cuerpoSel = "";
   let visibles = PAGINA;
 
+  // Permite buscar "10326", "cpp 135" o "codigo penal 79" aunque el número de ley no figure en el artículo
+  const ALIAS_CUERPO = {
+    "10326": "10326 ley 10326 convivencia ciudadana contravencional faltas",
+    CPP: "cpp codigo procesal penal cordoba ley 8123",
+    CP: "cp codigo penal ley 11179",
+    LEYES: "leyes especiales"
+  };
+  // Coincide solo al comienzo de una palabra ("arma" encuentra "armas", no "alarma" ni "farmacia")
+  function empiezaPalabra(texto, t) {
+    let i = texto.indexOf(t);
+    while (i !== -1) {
+      if (i === 0 || !/[a-z0-9]/.test(texto[i - 1])) return true;
+      i = texto.indexOf(t, i + 1);
+    }
+    return false;
+  }
   function construirIndice() {
     if (indice) return;
     indice = CATALOGO_CODIGOS.map((it) => {
       const etq = normalizarTexto(it.etiqueta), tit = normalizarTexto(it.titulo);
-      const txt = normalizarTexto(it.texto), tags = normalizarTexto(it.tags || "");
-      return { it, etq, tit, txt, tags, todo: `${etq} ${tit} ${txt} ${tags}` };
+      const txt = normalizarTexto(it.texto), tags = normalizarTexto(`${it.tags || ""} ${ALIAS_CUERPO[it.cuerpo] || ""}`);
+      const num = String(it.id).split("-")[1] || "";
+      return { it, num, etq, tit, txt, tags, todo: `${etq} ${tit} ${txt} ${tags}` };
     });
   }
   const regexNumero = (t) => new RegExp(`(^|[^0-9a-zA-Z])${t}([^0-9a-zA-Z]|$)`);
@@ -833,13 +872,20 @@
       .replace(/o/g, "[oóòôö]").replace(/u/g, "[uúùûü]").replace(/n/g, "[nñ]");
   }
   function resaltar(texto, terminos) {
-    const limpio = escapeHtml(texto);
+    texto = String(texto ?? "");
     const utiles = terminos.filter((t) => t.length >= 2 || /^\d+$/.test(t));
-    if (!utiles.length) return limpio;
-    return limpio.replace(new RegExp(`(${utiles.map(rxTolerante).join("|")})`, "gi"), "<mark>$1</mark>");
+    if (!utiles.length) return escapeHtml(texto);
+    const rx = new RegExp(`(${utiles.map((t) => (/^\d+$/.test(t) ? `\\b${t}\\b` : rxTolerante(t))).join("|")})`, "gi");
+    let out = "", ult = 0, m;
+    while ((m = rx.exec(texto))) {
+      if (!m[0]) { rx.lastIndex++; continue; }
+      out += escapeHtml(texto.slice(ult, m.index)) + "<mark>" + escapeHtml(m[0]) + "</mark>";
+      ult = m.index + m[0].length;
+    }
+    return out + escapeHtml(texto.slice(ult));
   }
   function badgeCuerpo(c) {
-    return c === "10326" ? "Ley 10.326" : c === "CPP" ? "CPP Cba" : c === "CP" ? "Cód. Penal" : c;
+    return c === "10326" ? "Ley 10.326" : c === "CPP" ? "CPP Cba" : c === "CP" ? "Cód. Penal" : c === "LEYES" ? "Leyes esp." : c;
   }
   const etiquetaCorta = (e) => e.replace(/^(Ley 10\.326|CPP Córdoba \(Ley 8\.123\)|Código Penal)\s·\s/, "");
 
@@ -851,13 +897,14 @@
       else if (cuerpoSel && r.it.cuerpo !== cuerpoSel) return false;
       return terminos.every((t, i) => rx[i]
         ? rx[i].test(r.etq) || rx[i].test(r.tags) || rx[i].test(r.tit) || rx[i].test(r.txt)
-        : r.todo.includes(t));
+        : empiezaPalabra(r.todo, t));
     });
     if (terminos.length) {
       const puntaje = (r) => {
         let s = 0;
         terminos.forEach((t, i) => {
           if (rx[i]) {
+            if (r.num === t) s += 30;
             if (rx[i].test(r.etq)) s += 10; if (rx[i].test(r.tags)) s += 6;
             if (rx[i].test(r.tit)) s += 4; if (rx[i].test(r.txt)) s += 2;
           } else {
@@ -899,11 +946,13 @@
     const abrir = total <= 2;
     lista.innerHTML = mostrar.map(({ it }) => {
       const fav = favoritos.includes(it.id);
+      const largo = String(it.texto).length > 240;
       return `<article class="art ${abrir ? "abierto" : ""}" data-id="${escapeAttr(it.id)}">
         <div class="cab"><span class="tag">${escapeHtml(badgeCuerpo(it.cuerpo))}</span><b>${resaltar(etiquetaCorta(it.etiqueta), terminos)}</b></div>
         <div class="tit">${resaltar(it.titulo, terminos)}</div>
         <div class="txt">${resaltar(it.texto, terminos)}</div>
         <div class="acc">
+          ${largo ? `<button type="button" class="sm" data-toggle>${abrir ? "Ver menos" : "Ver completo"}</button>` : ""}
           <button type="button" class="sm" data-copy-art>Copiar</button>
           <button type="button" class="sm" data-cita-art>Citar en acta</button>
           <button type="button" class="sm" data-fav aria-pressed="${fav}">${fav ? "Guardado" : "Guardar"}</button>
@@ -915,12 +964,26 @@
     if (restan > 0) $("#mas").textContent = `Mostrar ${Math.min(PAGINA, restan)} más (quedan ${restan})`;
   }
 
+  // Cita completa para el acta: "Art. 134 del CPP de Córdoba (Ley 8.123) – Regla General"
+  const DE_CUERPO = { "10326": "de la Ley 10.326", CPP: "del CPP de Córdoba (Ley 8.123)", CP: "del Código Penal" };
+  function citaArticulo(it) {
+    const art = etiquetaCorta(it.etiqueta);
+    const de = DE_CUERPO[it.cuerpo];
+    if (!de) return it.etiqueta;
+    const tit = it.cuerpo === "CP" ? "" : String(it.titulo || "").split(" — ")[0].trim();
+    return `${art} ${de}${tit ? " – " + tit : ""}`;
+  }
   $("#lista").addEventListener("click", async (e) => {
     const card = e.target.closest(".art");
     if (!card) return;
     const item = CATALOGO_CODIGOS.find((x) => x.id === card.dataset.id);
     if (!item) return;
-    if (e.target.closest(".txt")) { card.classList.toggle("abierto"); return; }
+    if (e.target.closest(".txt") || e.target.closest("[data-toggle]")) {
+      const ab = card.classList.toggle("abierto");
+      const bt = card.querySelector("[data-toggle]");
+      if (bt) bt.textContent = ab ? "Ver menos" : "Ver completo";
+      return;
+    }
     if (e.target.closest("[data-fav]")) {
       favoritos = favoritos.includes(item.id) ? favoritos.filter((x) => x !== item.id) : [...favoritos, item.id];
       saveJSON(LS_FAV, favoritos);
@@ -937,7 +1000,7 @@
     }
     if (e.target.closest("[data-cita-art]")) {
       if (!("RELATO" in estado.valores)) { toast("El acta en edición no tiene campo de relato"); return; }
-      const cita = `${etiquetaCorta(item.etiqueta)} (${item.titulo})`;
+      const cita = citaArticulo(item);
       const act = (estado.valores.RELATO || "").trim();
       setVal("RELATO", act ? `${act} ${cita}` : cita);
       actualizarVista(); guardarBorrador();
